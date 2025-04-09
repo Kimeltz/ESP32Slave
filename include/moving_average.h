@@ -1,6 +1,7 @@
 #ifndef MOVING_AVERAGE_H
 #define MOVING_AVERAGE_H
 #include <Arduino.h>
+
 struct MovingAverage {
     float* buffer;
     int size;
@@ -40,3 +41,20 @@ struct MovingAverage {
     }
   }
 #endif
+
+/*
+*** Example ***
+#include "moving_average.h"
+
+MovingAverage mq2Avg;
+
+void setup() {
+  initMovingAverage(mq2Avg, 10); // rata-rata 10 data terakhir
+}
+
+void loop() {
+  float filtered = updateMovingAverage(mq2Avg, analogRead(MQ2_PIN));
+  Serial.println(filtered);
+}
+
+*/
