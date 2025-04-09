@@ -11,14 +11,14 @@ class BluetoothComm {
 
         // Init bluetooth
         void begin() {
-        if (!btSerial.begin(deviceName)) {
-            Serial.println("❌ Bluetooth init gagal");
-        } else {
-            Serial.printf("📡 Bluetooth aktif sebagai \"%s\"\n", deviceName.c_str());
-        }
+          if (!btSerial.begin(deviceName)) {
+              Serial.println("❌ Bluetooth init gagal");
+          } else {
+              Serial.printf("📡 Bluetooth aktif sebagai \"%s\"\n", deviceName.c_str());
+          }
         }
 
-        // Kirim data (string atau angka)
+        // Kirim data
         void send(const String& data) {
             btSerial.println(data);
         }
