@@ -16,10 +16,9 @@ char** parse(char* input, const char* delim, int maxBuffer = 5)
   int index = 0;
   char* token = strtok(input, delim);
   while (token != NULL && index < maxBuffer - 1) {
-    buffer[index] = strdup(token);  // alokasikan dan salin
+    buffer[index] = strdup(token); 
     if (!buffer[index]) {
       Serial.printf("❌ Gagal alokasi untuk token ke-%d\n", index);
-      // Bersihkan alokasi sebelumnya
       for (int j = 0; j < index; j++) free(buffer[j]);
       free(buffer);
       return NULL;
