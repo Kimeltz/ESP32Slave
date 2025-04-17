@@ -33,6 +33,11 @@ struct MovingAverage {
     return ma.sum / ma.count;
   }
   
+  // === Round to nearest 0.05 ===
+  float roundToNearest005(float value) {
+    return round(value * 20.0) / 20.0;
+  }
+  
   // === Free memory ===
   inline void freeMovingAverage(MovingAverage &ma) {
     if (ma.buffer != nullptr) {
@@ -46,14 +51,14 @@ struct MovingAverage {
 *** Example ***
 #include "moving_average.h"
 
-MovingAverage mq2Avg;
+MovingAverage beratFiltered;
 
 void setup() {
-  initMovingAverage(mq2Avg, 10); // rata-rata 10 data terakhir
+  initMovingAverage(beratFiltered, 10); // rata-rata 10 data terakhir
 }
 
 void loop() {
-  float filtered = updateMovingAverage(mq2Avg, analogRead(MQ2_PIN));
+  float filtered = updateMovingAverage(beratFiltered, analogRead(MQ2_PIN));
   Serial.println(filtered);
 }
 
