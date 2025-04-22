@@ -3,6 +3,8 @@
 #include <Adafruit_BME280.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <MQ2.h>
+#include <SignalProcessing.h>
 
 // === PIN SETUP ===
 #define MQ2_PIN 36       // Analog input for MQ-2
@@ -12,13 +14,20 @@
 // === Other Define ===
 #define intervalDataRead 500
 #define expectedSensorCount 4
-#define DATA_BUFFER_SIZE 100
+#define DATA_BUFFER_SIZE 25
+#define DATA_READ_PER_INTERVAL 2
+
+// === MQ2 ===
+MQ2 mq2(MQ2_PIN);
+movingAverage lpgValue(DATA_BUFFER_SIZE);
+movingAverage coValue(DATA_BUFFER_SIZE);
+movingAverage smokeValue(DATA_BUFFER_SIZE);
 
 // === BME280 ===
 Adafruit_BME280 bme;
 #define SEALEVELPRESSURE_HPA (1013.25)
-float* bmeHumidity;
-float* bmePressure;
+movingAverage bmeHumidity(DATA_BUFFER_SIZE);
+movingAverage bmePressure(DATA_BUFFER_SIZE);
 
 // === DS18B20 ===
 OneWire oneWire(ONE_WIRE_BUS);
@@ -63,6 +72,9 @@ void setup() {
     while (1);
   }
 
+  // === Start MQ2 ===
+  mq2.begin();
+
   // === Setup analog inputs ===
   analogReadResolution(12); // ESP32 uses 12-bit ADC
 
@@ -79,32 +91,42 @@ void readData()
   static int index = 0;
   if(intervalDataRead < millis() - lastDataRead)
   {
-    for(int i = 0; i < 10; i++)
+    for(int i = 0; i < DATA_READ_PER_INTERVAL; i++)
     {
       // === Read MQ Sensors ===
-      int mq2Value = analogRead(MQ2_PIN);
-      int mq7Value = analogRead(MQ7_PIN);
+      lpgValue.update(mq2.readLPG());
+      coValue.update(mq2.readCO());
+      smokeValue.update(mq2.readSmoke());
 
       // === Read DS18B20 ===
       ds18b20.requestTemperatures();
       Serial.println("==== DS18B20 Temperatures ====");
-      for (int i = 0; i < actualSensorCount; i++) {
-        if(ds18b20Temp[i] != NULL)
+      for (int j = 0; j < actualSensorCount; j++) {
+        if(ds18b20Temp[j] != NULL)
         {
-          ds18b20Temp[i][index] = ds18b20.getTempC(ds18b20Addresses[i]);
+          ds18b20Temp[j][index] = ds18b20.getTempC(ds18b20Addresses[j]);
         }
       }
 
       // === Read BME280 ===
-      bmeHumidity[index] = bme.readHumidity();
-      bmePressure[index] = bme.readPressure() / 100.0F;
+      bmeHumidity.update(bme.readHumidity());
+      bmePressure.update(bme.readPressure() / 100.0F);
 
       // === Output to Serial ===
       Serial.println("==== Sensor Readings ====");
-      Serial.printf("MQ-2 (Analog): %d\n", mq2Value);
-      Serial.printf("MQ-7 (Analog): %d\n", mq7Value);
-      Serial.printf("BME280 Humid : %.2f %%\n", bmeHumidity[index]);
-      Serial.printf("BME280 Press : %.2f hPa\n", bmePressure[index]);
+      Serial.printf("MQ2 LPG     : %.2f ppm\n", lpgValue.getValue());
+      Serial.printf("MQ2 CO      : %.2f ppm\n", coValue.getValue());
+      Serial.printf("MQ2 Smoke   : %.2f ppm\n", smokeValue.getValue());
+      Serial.println("==== DS18B20 Temperatures ====");
+      for (int j = 0; j < actualSensorCount; j++) {
+        if(ds18b20Temp[j] != NULL)
+        {
+          Serial.printf("DS18B20 %d : %.2f °C\n", ds18b20Addresses[j], ds18b20Temp[j][index]);
+        }
+      }
+      Serial.println("==== BME280 Readings ====");
+      Serial.printf("BME280 Humid : %.2f %%\n", bmeHumidity.getValue());
+      Serial.printf("BME280 Press : %.2f hPa\n", bmePressure.getValue());
       Serial.println("==========================\n");
 
       index = (index + 1) % DATA_BUFFER_SIZE;
@@ -124,11 +146,22 @@ void printAddress(DeviceAddress deviceAddress) {
 
 void init()
 {
-  bmeHumidity = (float*)calloc(DATA_BUFFER_SIZE, sizeof(float));
-  bmePressure = (float*)calloc(DATA_BUFFER_SIZE, sizeof(float));
+  // === Call 1D for MQ2 ===
+  if(!lpgValue.init() || !coValue.init() || !smokeValue.init())
+  {
+    Serial.println("❌ Gagal mengalokasikan memori!");
+    while (1);
+  }
+
+  // === Call 1D for BME280 ===
+  if(!bmeHumidity.init() || !bmePressure.init())
+  {
+    Serial.println("❌ Gagal mengalokasikan memori!");
+    while (1);
+  }
   // === Call 2D for DS18B20 ===
   ds18b20Temp = (float**)calloc(actualSensorCount, sizeof(float*));
-  if (!bmeHumidity || !bmePressure || !ds18b20Temp) {
+  if (!ds18b20Temp) {
     Serial.println("❌ Gagal mengalokasikan memori!");
     while (1);
   }
