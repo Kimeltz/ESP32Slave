@@ -34,8 +34,6 @@ uint64_t lastDataRead = 0;
 void printAddress(DeviceAddress deviceAddress);
 void init();
 void readData();
-void freeParse(char** buffer, int maxBuffer);
-char** parse(char* input, const char* delim, int maxBuffer = 5);
 
 
 void setup() {

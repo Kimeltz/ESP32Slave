@@ -25,7 +25,7 @@ class RS485Comm {
     // Mode kirim
     void setTransmitMode() {
       digitalWrite(controlPin, HIGH);
-      delayMicroseconds(10); // waktu tunda kecil agar stabil
+      delayMicroseconds(10);
     }
 
     // Mode terima
