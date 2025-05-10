@@ -199,12 +199,12 @@ void sendDataRS485()
 {
   String data = "";
 
-  // === Sensor MQ2 ===
-  data += "LPG:" + String(lpgValue.getValue(), 2) + ";";
-  data += "CO:" + String(coValue.getValue(), 2) + ";";
-  data += "SMK:" + String(smokeValue.getValue(), 2) + ";";
-
-
+  // // === Sensor MQ2 ===
+  // data += "LPG:" + String(lpgValue.getValue(), 2) + ";";
+  // data += "CO:" + String(coValue.getValue(), 2) + ";";
+  // data += "SMK:" + String(smokeValue.getValue(), 2) + ";";
+  data += "MQ2:" + String(mq2Value) + ";";
+  data += "MQ7:" + String(mq7Value) + ";";
 
   // === Sensor DS18B20 ===
   for (int i = 0; i < actualSensorCount; i++) {
@@ -216,10 +216,10 @@ void sendDataRS485()
 
   // === BME280 ===
   data += "HUM:" + String(bmeHumidity.getValue(), 2) + ";";
-  data += "PRS:" + String(bmePressure.getValue(), 2) + "\n"; // akhir data
+  data += "PRS:" + String(bmePressure.getValue(), 2) + "\n"; 
 
   // === Kirim ke master via RS485 ===
   rs485.send(data);
   Serial.print("📤 Kirim RS485: ");
-  Serial.print(data); // cetak ke serial juga untuk debug
+  Serial.print(data);
 }
