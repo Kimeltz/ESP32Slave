@@ -5,11 +5,18 @@
 #include <DallasTemperature.h>
 #include <MQ2.h>
 #include <SignalProcessing.h>
+#include "rs485_comm.h"
 
 // === PIN SETUP ===
-#define MQ2_PIN 36       // Analog input for MQ-2
-#define MQ7_PIN 39       // Analog input for MQ-7
+#define MQ2_PIN 34       // Analog input for MQ-2
+#define MQ7_PIN 35       // Analog input for MQ-7
 #define ONE_WIRE_BUS 4   // DS18B20 data pin
+#define RS485_DE_PIN 32  // RS485 DE pin
+#define RS485_RE_PIN 33  // RS485 RE pin
+#define RS485_TX_PIN 17  // RS485 TX pin
+#define RS485_RX_PIN 16  // RS485 RX pin
+#define BME280_SDA 21   // BME280 SDA pin
+#define BME280_SCL 22   // BME280 SCL pin
 
 // === Other Define ===
 #define intervalDataRead 500
@@ -18,10 +25,14 @@
 #define DATA_READ_PER_INTERVAL 2
 
 // === MQ2 ===
+int mq2Value = 0;
 MQ2 mq2(MQ2_PIN);
 movingAverage lpgValue(DATA_BUFFER_SIZE);
 movingAverage coValue(DATA_BUFFER_SIZE);
 movingAverage smokeValue(DATA_BUFFER_SIZE);
+
+// === MQ7 ===
+int mq7Value = 0;
 
 // === BME280 ===
 Adafruit_BME280 bme;
@@ -39,9 +50,13 @@ float** ds18b20Temp;
 // === Global Variable ===
 uint64_t lastDataRead = 0;
 
+// === MAX485 ===
+#define RS485_BAUD 9600
+RS485Comm rs485(Serial1, RS485_DE_PIN, RS485_RE_PIN, RS485_BAUD); // DE = GPIO32, RE = GPIO33
+
 // === Funcs ===
 void printAddress(DeviceAddress deviceAddress);
-void init();
+void sensorInit();
 void readData();
 
 
@@ -78,11 +93,14 @@ void setup() {
   // === Setup analog inputs ===
   analogReadResolution(12); // ESP32 uses 12-bit ADC
 
-  init();
+  rs485.begin();
+  sensorInit();
 }
 
 void loop() {
   readData();
+  delay(500);
+  sendDataRS485();
 }
 
 
@@ -97,6 +115,8 @@ void readData()
       lpgValue.update(mq2.readLPG());
       coValue.update(mq2.readCO());
       smokeValue.update(mq2.readSmoke());
+      mq2Value = analogRead(MQ2_PIN);
+      mq7Value = analogRead(MQ7_PIN);
 
       // === Read DS18B20 ===
       ds18b20.requestTemperatures();
@@ -144,7 +164,7 @@ void printAddress(DeviceAddress deviceAddress) {
   Serial.println();
 }
 
-void init()
+void sensorInit()
 {
   // === Call 1D for MQ2 ===
   if(!lpgValue.init() || !coValue.init() || !smokeValue.init())
@@ -173,4 +193,33 @@ void init()
       while (1);
     }    
   }
+}
+
+void sendDataRS485()
+{
+  String data = "";
+
+  // === Sensor MQ2 ===
+  data += "LPG:" + String(lpgValue.getValue(), 2) + ";";
+  data += "CO:" + String(coValue.getValue(), 2) + ";";
+  data += "SMK:" + String(smokeValue.getValue(), 2) + ";";
+
+
+
+  // === Sensor DS18B20 ===
+  for (int i = 0; i < actualSensorCount; i++) {
+    if(ds18b20Temp[i] != NULL)
+    {
+      data += "T" + String(i+1) + ":" + String(ds18b20Temp[i][0], 2) + ";";
+    }
+  }
+
+  // === BME280 ===
+  data += "HUM:" + String(bmeHumidity.getValue(), 2) + ";";
+  data += "PRS:" + String(bmePressure.getValue(), 2) + "\n"; // akhir data
+
+  // === Kirim ke master via RS485 ===
+  rs485.send(data);
+  Serial.print("📤 Kirim RS485: ");
+  Serial.print(data); // cetak ke serial juga untuk debug
 }
