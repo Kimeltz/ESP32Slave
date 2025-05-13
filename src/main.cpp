@@ -231,7 +231,7 @@ void sendDataRS485()
   for (int i = 0; i < actualSensorCount; i++) {
     if(ds18b20Temp[i] != NULL)
     {
-      data += "T" + String(i+1) + ":" + String(ds18b20Temp[i][0], 2) + ";";
+      data += "TEMP" + String(i+1) + ":" + String(ds18b20Temp[i][0], 2) + ";";
     }
   }
 
