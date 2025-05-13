@@ -6,6 +6,7 @@
 #include <MQ2.h>
 #include <SignalProcessing.h>
 #include "rs485_comm.h"
+#include "eeprom_storage.h"
 
 // === PIN SETUP ===
 #define MQ2_PIN 34       // Analog input for MQ-2
@@ -47,6 +48,13 @@ DeviceAddress ds18b20Addresses[4];
 int actualSensorCount = 0;
 float** ds18b20Temp;
 
+// === EEPROM ===
+EEPROMStorage memory;
+#define MAGIC_ADDR 0
+#define MAGIC_NUMBER 0xDEADBEEF
+#define ID_ADDR 4
+String sensorID;
+
 // === Global Variable ===
 uint64_t lastDataRead = 0;
 
@@ -62,6 +70,7 @@ void readData();
 
 void setup() {
   Serial.begin(115200);
+  memory.begin();
   delay(1000);
 
   // === Start DS18B20 ===
@@ -95,6 +104,15 @@ void setup() {
 
   rs485.begin();
   sensorInit();
+  if(idCheck())
+  {
+    String id = memory.readString(4);
+    Serial.printf("ID yang ada: %s\n", id);
+  }
+  else
+  {
+    setNewID();
+  }
 }
 
 void loop() {
@@ -199,12 +217,15 @@ void sendDataRS485()
 {
   String data = "";
 
+  // === ID sensor ===
+  data += "ID:" + sensorID + ";";
+
   // // === Sensor MQ2 ===
   // data += "LPG:" + String(lpgValue.getValue(), 2) + ";";
   // data += "CO:" + String(coValue.getValue(), 2) + ";";
   // data += "SMK:" + String(smokeValue.getValue(), 2) + ";";
-  data += "MQ2:" + String(mq2Value) + ";";
-  data += "MQ7:" + String(mq7Value) + ";";
+  data += "GAS:" + String(mq2Value) + ";";
+  data += "CO:" + String(mq7Value) + ";";
 
   // === Sensor DS18B20 ===
   for (int i = 0; i < actualSensorCount; i++) {
@@ -222,4 +243,20 @@ void sendDataRS485()
   rs485.send(data);
   Serial.print("📤 Kirim RS485: ");
   Serial.print(data);
+}
+
+bool idCheck()
+{
+  uint32_t magic = memory.read<uint32_t>(MAGIC_ADDR);
+  return magic == MAGIC_NUMBER;
+}
+
+void setNewID()
+{
+  uint32_t randPart = esp_random();
+  uint32_t timePart = millis();
+  sensorID = String(randPart, HEX) + String(timePart, HEX);
+  memory.write<uint32_t>(MAGIC_ADDR, MAGIC_NUMBER);
+  memory.writeString(4, sensorID);
+  Serial.printf("ID baru: %s\n", sensorID);
 }
