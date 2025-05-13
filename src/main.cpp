@@ -218,7 +218,7 @@ void sendDataRS485()
   String data = "";
 
   // === ID sensor ===
-  data += "ID:" + sensorID + ";";
+  data += "SID:" + sensorID + ";";
 
   // // === Sensor MQ2 ===
   // data += "LPG:" + String(lpgValue.getValue(), 2) + ";";
