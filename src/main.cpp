@@ -100,7 +100,7 @@ void setup() {
   mq2.begin();
 
   // === Setup analog inputs ===
-  analogReadResolution(12); // ESP32 uses 12-bit ADC
+  analogReadResolution(10); // ESP32 uses 12-bit ADC
 
   rs485.begin();
   sensorInit();
