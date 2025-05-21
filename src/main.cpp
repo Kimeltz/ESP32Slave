@@ -7,6 +7,7 @@
 #include <SignalProcessing.h>
 #include "rs485_comm.h"
 #include "eeprom_storage.h"
+#include <MQ7.h>
 
 // === PIN SETUP ===
 #define MQ2_PIN 34       // Analog input for MQ-2
@@ -34,6 +35,7 @@ movingAverage smokeValue(DATA_BUFFER_SIZE);
 
 // === MQ7 ===
 int mq7Value = 0;
+MQ7 mq7(MQ7_PIN, 5.0);
 
 // === BME280 ===
 Adafruit_BME280 bme;
@@ -57,6 +59,7 @@ String sensorID;
 
 // === Global Variable ===
 uint64_t lastDataRead = 0;
+int dataIndex = 0;
 
 // === MAX485 ===
 #define RS485_BAUD 9600
@@ -66,6 +69,11 @@ RS485Comm rs485(Serial1, RS485_DE_PIN, RS485_RE_PIN, RS485_BAUD); // DE = GPIO32
 void printAddress(DeviceAddress deviceAddress);
 void sensorInit();
 void readData();
+void sendDataRS485();
+void setNewID();
+bool idCheck();
+float avgArray(float** arr, int size);
+int classifyCondition();
 
 
 void setup() {
@@ -124,25 +132,25 @@ void loop() {
 
 void readData()
 {
-  static int index = 0;
+  
   if(intervalDataRead < millis() - lastDataRead)
   {
     for(int i = 0; i < DATA_READ_PER_INTERVAL; i++)
     {
       // === Read MQ Sensors ===
-      lpgValue.update(mq2.readLPG());
-      coValue.update(mq2.readCO());
-      smokeValue.update(mq2.readSmoke());
+      // lpgValue.update(mq2.readLPG());
+      // coValue.update(mq2.readCO());
+      // smokeValue.update(mq2.readSmoke());
       mq2Value = analogRead(MQ2_PIN);
-      mq7Value = analogRead(MQ7_PIN);
+      mq7Value = mq7.getPPM();
 
       // === Read DS18B20 ===
       ds18b20.requestTemperatures();
-      Serial.println("==== DS18B20 Temperatures ====");
+      delay(50);
       for (int j = 0; j < actualSensorCount; j++) {
         if(ds18b20Temp[j] != NULL)
         {
-          ds18b20Temp[j][index] = ds18b20.getTempC(ds18b20Addresses[j]);
+          ds18b20Temp[j][dataIndex] = ds18b20.getTempC(ds18b20Addresses[j]);
         }
       }
 
@@ -152,22 +160,35 @@ void readData()
 
       // === Output to Serial ===
       Serial.println("==== Sensor Readings ====");
-      Serial.printf("MQ2 LPG     : %.2f ppm\n", lpgValue.getValue());
-      Serial.printf("MQ2 CO      : %.2f ppm\n", coValue.getValue());
-      Serial.printf("MQ2 Smoke   : %.2f ppm\n", smokeValue.getValue());
-      Serial.println("==== DS18B20 Temperatures ====");
-      for (int j = 0; j < actualSensorCount; j++) {
-        if(ds18b20Temp[j] != NULL)
-        {
-          Serial.printf("DS18B20 %d : %.2f °C\n", ds18b20Addresses[j], ds18b20Temp[j][index]);
-        }
+      Serial.printf("MQ2 LPG     : %.2f ppm\n", mq2.readLPG());
+      Serial.printf("MQ2 CO      : %.2f ppm\n", mq2.readCO());
+      Serial.printf("MQ2 Smoke   : %.2f ppm\n", mq2.readSmoke());
+      Serial.printf("MQ7 CO      : %d\n", mq7Value);
+      // Serial.println("==== DS18B20 Temperatures ====");
+      // for (int j = 0; j < actualSensorCount; j++) {
+      //   if(ds18b20Temp[j] != NULL)
+      //   {
+      //     Serial.printf("DS18B20 %d : %.2f °C\n", ds18b20Addresses[j], ds18b20Temp[j][dataIndex]);
+      //   }
+      // }
+      // Serial.println("==== BME280 Readings ====");
+      // Serial.printf("BME280 Humid : %.2f %%\n", bmeHumidity.getValue());
+      // Serial.printf("BME280 Press : %.2f hPa\n", bmePressure.getValue());
+      
+      Serial.println("==== Kondisi ====");
+      int condition = classifyCondition();
+      if (condition == 3) {
+        Serial.println("🔥 Kebakaran terdeteksi!");
+      } else if (condition == 2) {
+        Serial.println("🚨 Bahaya terdeteksi!");
+      } else if (condition == 1) {
+        Serial.println("⚠️ Waspada!");
+      } else {
+        Serial.println("✅ Ruangan Aman");
       }
-      Serial.println("==== BME280 Readings ====");
-      Serial.printf("BME280 Humid : %.2f %%\n", bmeHumidity.getValue());
-      Serial.printf("BME280 Press : %.2f hPa\n", bmePressure.getValue());
       Serial.println("==========================\n");
 
-      index = (index + 1) % DATA_BUFFER_SIZE;
+      dataIndex = (dataIndex + 1) % DATA_BUFFER_SIZE;
       delay(50);
     }
     lastDataRead = millis();
@@ -231,7 +252,7 @@ void sendDataRS485()
   for (int i = 0; i < actualSensorCount; i++) {
     if(ds18b20Temp[i] != NULL)
     {
-      data += "TEMP" + String(i+1) + ":" + String(ds18b20Temp[i][0], 2) + ";";
+      data += "TEMP" + String(i+1) + ":" + String(ds18b20Temp[i][dataIndex], 2) + ";";
     }
   }
 
@@ -259,4 +280,36 @@ void setNewID()
   memory.write<uint32_t>(MAGIC_ADDR, MAGIC_NUMBER);
   memory.writeString(4, sensorID);
   Serial.printf("ID baru: %s\n", sensorID);
+}
+
+int classifyCondition() {
+  float avgTemp = avgArray(ds18b20Temp, actualSensorCount);
+  int score = 0;
+  if (avgTemp > 50) score++;
+  if (bmeHumidity.getValue() < 30) score++;
+  if (mq2Value > 400) score++;
+  if (mq7Value > 20) score+= mq7Value/20;
+  for(int i = 0; i < actualSensorCount; i++) 
+  {
+    if(abs(ds18b20Temp[i][dataIndex]-avgTemp) > 5)
+    {
+      score++;
+      break;
+    }
+  }
+
+  if (score >= 4) return 3; // Kebakaran
+  else if (score == 3) return 2; // Bahaya
+  else if (score == 2) return 1; // Waspada
+  else return 0; // Normal
+}
+
+float avgArray(float** arr, int size)
+{
+  float sum = 0;
+  for(int i = 0; i < size; i++)
+  {
+    sum += arr[i][dataIndex];
+  }
+  return sum / size;
 }
