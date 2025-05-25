@@ -19,6 +19,7 @@
 #define RS485_RX_PIN 16  // RS485 RX pin
 #define BME280_SDA 21   // BME280 SDA pin
 #define BME280_SCL 22   // BME280 SCL pin
+#define BUZZER_PIN 25 // Buzzer pin
 
 // === Other Define ===
 #define intervalDataRead 500
@@ -57,13 +58,18 @@ EEPROMStorage memory;
 #define ID_ADDR 4
 String sensorID;
 
+// === Buzzer ===
+unsigned long previousBuzzerMillis = 0;
+int buzzerState = LOW;
+int buzzerInterval = 0;
+
 // === Global Variable ===
 uint64_t lastDataRead = 0;
 int dataIndex = 0;
 
 // === MAX485 ===
 #define RS485_BAUD 9600
-RS485Comm rs485(Serial1, RS485_DE_PIN, RS485_RE_PIN, RS485_BAUD); // DE = GPIO32, RE = GPIO33
+RS485Comm rs485(Serial2, RS485_DE_PIN, RS485_RE_PIN, RS485_BAUD); // DE = GPIO32, RE = GPIO33
 
 // === Funcs ===
 void printAddress(DeviceAddress deviceAddress);
@@ -74,6 +80,7 @@ void setNewID();
 bool idCheck();
 float avgArray(float** arr, int size);
 int classifyCondition();
+void buzzerAlert();
 
 
 void setup() {
@@ -126,6 +133,7 @@ void setup() {
 void loop() {
   readData();
   delay(500);
+  buzzerAlert();
   sendDataRS485();
 }
 
@@ -312,4 +320,22 @@ float avgArray(float** arr, int size)
     sum += arr[i][dataIndex];
   }
   return sum / size;
+}
+
+void buzzerAlert() {
+  switch (classifyCondition()) {
+    case 3: buzzerInterval = 1000; break; 
+    case 2: buzzerInterval = 500;  break; 
+    case 1: buzzerInterval = 250;  break; 
+    default:
+      digitalWrite(BUZZER_PIN, LOW);
+      return;
+  }
+
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousBuzzerMillis >= buzzerInterval) {
+    previousBuzzerMillis = currentMillis;
+    buzzerState = !buzzerState;
+    digitalWrite(BUZZER_PIN, buzzerState);
+  }
 }
